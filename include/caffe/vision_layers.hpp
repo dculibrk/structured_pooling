@@ -76,7 +76,7 @@ class ConvolutionLayer : public Layer<Dtype> {
   virtual inline int MinBottomBlobs() const { return 1; }
   virtual inline int MinTopBlobs() const { return 1; }
   virtual inline bool EqualNumBottomTopBlobs() const { return true; }
-
+  
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top);
@@ -300,6 +300,9 @@ class PoolingLayer : public Layer<Dtype> {
     return (this->layer_param_.pooling_param().pool() ==
             PoolingParameter_PoolMethod_MAX) ? 2 : 1;
   }
+  
+ virtual inline Blob<int>* get_pooling_structure(){return &pooling_structure_;}
+ virtual void GeneratePoolingStructure(float alpha = 0.5, bool switch_off_rect = false);
 
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
@@ -310,6 +313,7 @@ class PoolingLayer : public Layer<Dtype> {
       const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
+  virtual void GenerateSinglePoolingMask(int* pooling_structure, float alpha, bool switch_off_rect = false);
 
   int kernel_h_, kernel_w_;
   int stride_h_, stride_w_;
@@ -317,6 +321,9 @@ class PoolingLayer : public Layer<Dtype> {
   int channels_;
   int height_, width_;
   int pooled_height_, pooled_width_;
+  //Field used to store the pooling structure
+  Blob<int> pooling_structure_;
+  
   Blob<Dtype> rand_idx_;
   Blob<int> max_idx_;
 };

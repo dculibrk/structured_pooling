@@ -458,6 +458,97 @@ TYPED_TEST(PoolingLayerTest, TestGradientMax) {
   }
 }
 
+TYPED_TEST(PoolingLayerTest, TestSetupStructPool) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(3);
+  pooling_param->set_stride(2);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_STRUCT_SEL);
+  PoolingLayer<Dtype> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  EXPECT_EQ(this->blob_top_->num(), this->blob_bottom_->num());
+  EXPECT_EQ(this->blob_top_->channels(), this->blob_bottom_->channels());
+  EXPECT_EQ(this->blob_top_->height(), 3);
+  EXPECT_EQ(this->blob_top_->width(), 2);
+}
+
+TYPED_TEST(PoolingLayerTest, TestGenerateMasksStructPool) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(3);
+  pooling_param->set_stride(2);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_STRUCT_SEL);
+  PoolingLayer<Dtype> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  layer.GeneratePoolingStructure();
+  EXPECT_EQ(this->blob_top_->num(), this->blob_bottom_->num());
+  EXPECT_EQ(this->blob_top_->channels(), this->blob_bottom_->channels());
+  EXPECT_EQ(this->blob_top_->height(), 3);
+  EXPECT_EQ(this->blob_top_->width(), 2);
+}
+
+TYPED_TEST(PoolingLayerTest, TestCPUGradientStructSel) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(3);
+  pooling_param->set_stride(2);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_STRUCT_SEL);
+  //pooling_param->set_pooling_structure_file("src/caffe/test/test_data/pooling_structure.txt");
+  //Caffe::set_mode(Caffe::CPU);
+  PoolingLayer<Dtype> layer(layer_param);
+  GradientChecker<Dtype> checker(1e-4, 1e-2);
+  checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),
+      &(this->blob_top_vec_));
+}
+
+/*TYPED_TEST(PoolingLayerTest, TestForwardStructPool) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(3);
+  pooling_param->set_stride(2);
+  pooling_param->set_pad(2);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_STRUCT_SEL);
+  this->blob_bottom_->Reshape(1, 1, 3, 3);
+  // Input:
+  //     [ 1 2 4 ]
+  //     [ 2 3 2 ]
+  //     [ 4 2 1 ]
+  this->blob_bottom_->mutable_cpu_data()[0] = 1;
+  this->blob_bottom_->mutable_cpu_data()[1] = 2;
+  this->blob_bottom_->mutable_cpu_data()[2] = 4;
+  this->blob_bottom_->mutable_cpu_data()[3] = 2;
+  this->blob_bottom_->mutable_cpu_data()[4] = 3;
+  this->blob_bottom_->mutable_cpu_data()[5] = 2;
+  this->blob_bottom_->mutable_cpu_data()[6] = 4;
+  this->blob_bottom_->mutable_cpu_data()[7] = 2;
+  this->blob_bottom_->mutable_cpu_data()[8] = 1;
+  PoolingLayer<Dtype> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 3);
+  EXPECT_EQ(this->blob_top_->width(), 3);
+  layer.Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+  Dtype epsilon = 1e-8;
+  // Output:
+  //     [ 1 4 4 ]
+  //     [ 4 4 4 ]
+  //     [ 4 4 1 ]
+  EXPECT_NEAR(this->blob_top_->cpu_data()[0], 1, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[1], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[2], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[3], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[4], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[5], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[6], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[7], 4, epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[8], 1, epsilon);
+}*/
+
 TYPED_TEST(PoolingLayerTest, TestForwardMaxPadded) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;

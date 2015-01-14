@@ -1,0 +1,10 @@
+include/caffe/net.hpp
+include/caffe/vision_layers.hpp
+src/caffe/layers/pooling_layer.cpp
+src/caffe/layers/pooling_layer.cu
+src/caffe/layers/window_data_layer.cpp
+src/caffe/net.cpp
+src/caffe/proto/caffe.proto
+src/caffe/test/test_data/pooling_structure.txt
+src/caffe/test/test_pooling_layer.cpp
+
