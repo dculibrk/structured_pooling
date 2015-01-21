@@ -580,6 +580,7 @@ message PoolingParameter {
     AVE = 1;
     STOCHASTIC = 2;
     STRUCT_SEL = 3;
+    BINARY = 4;
   }
   optional PoolMethod pool = 1 [default = MAX]; // The pooling method
   // Pad, kernel size, and stride are all given as a single value for equal
@@ -716,6 +717,7 @@ message V0LayerParameter {
     AVE = 1;
     STOCHASTIC = 2;
     STRUCT_SEL = 3;
+    BINARY = 4;
   }
   optional PoolMethod pool = 11 [default = MAX]; // The pooling method
   optional float dropout_ratio = 12 [default = 0.5]; // dropout ratio

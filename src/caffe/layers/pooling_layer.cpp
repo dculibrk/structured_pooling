@@ -93,8 +93,9 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     (*top)[1]->ReshapeLike(*(*top)[0]);
   }
   // If max pooling, we will initialize the vector index part.
-  if (this->layer_param_.pooling_param().pool() ==
-      PoolingParameter_PoolMethod_MAX && top->size() == 1) {
+  if ((this->layer_param_.pooling_param().pool() ==
+      PoolingParameter_PoolMethod_MAX || this->layer_param_.pooling_param().pool() ==
+      PoolingParameter_PoolMethod_BINARY ) && top->size() == 1) {
     max_idx_.Reshape(bottom[0]->num(), channels_, pooled_height_,
         pooled_width_);
   }
