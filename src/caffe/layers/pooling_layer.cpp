@@ -119,7 +119,7 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     //this->blobs_[0]->Reshape(channels_, pooled_height_*pooled_width_/*map_size*/, pooled_height_, pooled_width_);
     
     //pooling_structure_ = this->blobs_[0].get();
-    pooling_structure_.Reshape(channels_, pooled_height_*pooled_width_/*map_size*/, pooled_height_, pooled_width_);
+    pooling_structure_.Reshape(1, channels_, pooled_height_, pooled_width_);
   }
 }
 
@@ -571,7 +571,7 @@ void PoolingLayer<Dtype>::GeneratePoolingStructure(float alpha, bool switch_off_
   
   //load the mutable structure with ones where necessary
   for (c = 0; c < channels_; ++c) {
-    for (i = 0; i < top_size; ++i) {
+    //for (i = 0; i < top_size; ++i) {
       
       //fill it with zeros-]
       /*for (int ph = 0; ph < height_; ++ph) {-]
@@ -597,7 +597,7 @@ void PoolingLayer<Dtype>::GeneratePoolingStructure(float alpha, bool switch_off_
       GenerateSinglePoolingMask(pooling_structure, alpha, false);
       
       pooling_structure += pooling_structure_.offset(0,1); //move through map neurons-]
-    }
+    //}
   }
    
   

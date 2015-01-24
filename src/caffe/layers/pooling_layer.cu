@@ -87,6 +87,52 @@ __global__ void BinaryPoolForward(const int nthreads, const Dtype* bottom_data,
 }
 
 template <typename Dtype>
+__global__ void StructSelPoolForwardTrain(const int nthreads, const Dtype* bottom_data, const int* pooling_structure,
+    const int num, const int channels, const int height,
+    const int width, const int pooled_height, const int pooled_width,
+    const int kernel_h, const int kernel_w, const int stride_h,
+    const int stride_w, const int pad_h, const int pad_w, Dtype* top_data,
+    int* mask, Dtype* top_mask) {
+  CUDA_KERNEL_LOOP(index, nthreads) {
+    int pw = index % pooled_width;
+    int ph = (index / pooled_width) % pooled_height;
+    int c = (index / pooled_width / pooled_height) % channels;
+    int n = index / pooled_width / pooled_height / channels;
+    int hstart = ph * stride_h - pad_h;
+    int wstart = pw * stride_w - pad_w;
+    int hend = min(hstart + kernel_h, height);
+    int wend = min(wstart + kernel_w, width);
+    hstart = max(hstart, 0);
+    wstart = max(wstart, 0);
+    Dtype maxval = -FLT_MAX;
+    int maxidx = -1;
+    bottom_data += (n * channels + c) * height * width;
+    pooling_structure += c*pooled_height*pooled_width;
+    int switched_off = pooling_structure[ph*pooled_width+pw];
+
+    if(!switched_off){
+
+        for (int h = hstart; h < hend; ++h) {
+            for (int w = wstart; w < wend; ++w) {
+                if (bottom_data[h * width + w] > maxval) {
+                    maxidx = h * width + w;
+                    maxval = bottom_data[maxidx];
+                }
+            }
+        }
+        top_data[index] = maxval;
+    }else{
+        top_data[index] = 0;
+    }
+    if (mask) {
+      mask[index] = maxidx;
+    } else {
+      top_mask[index] = maxidx;
+    }
+  }
+}
+
+template <typename Dtype>
 __global__ void AvePoolForward(const int nthreads, const Dtype* bottom_data,
     const int num, const int channels, const int height,
     const int width, const int pooled_height, const int pooled_width,
@@ -118,7 +164,7 @@ __global__ void AvePoolForward(const int nthreads, const Dtype* bottom_data,
 }
 
 template <typename Dtype>
-__global__ void StructSelPoolForwardTrain(const int nthreads, const Dtype* bottom_data, const int* pooling_structure,
+__global__ void StructSelPoolForwardTrainOld(const int nthreads, const Dtype* bottom_data, const int* pooling_structure,
     const int num, const int channels, const int height,
     const int width, const int pooled_height, const int pooled_width,
     const int kernel_h, const int kernel_w, const int stride_h,
@@ -133,7 +179,8 @@ __global__ void StructSelPoolForwardTrain(const int nthreads, const Dtype* botto
     Dtype maxval = -FLT_MAX;
     
     bottom_data += (n * channels + c) * height * width;
-    
+
+    //beware! the format of the pooling structure has beeen changed!
     pooling_structure += (c*pooled_height*pooled_width+ph*pooled_width+pw)*pooled_height*pooled_width;
     
     for (int h = 0; h < pooled_height; ++h) {
@@ -163,7 +210,7 @@ __global__ void StructSelPoolForwardTrain(const int nthreads, const Dtype* botto
 }
 
 template <typename Dtype>
-__global__ void StructSelPoolForwardTest(const int nthreads, const Dtype* bottom_data,
+__global__ void StructSelPoolForwardTestOld(const int nthreads, const Dtype* bottom_data,
     const int num, const int channels, const int height,
     const int width, const int pooled_height, const int pooled_width,
     const int kernel_h, const int kernel_w, const int stride_h,
@@ -324,22 +371,41 @@ void PoolingLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     }
     break;
   case PoolingParameter_PoolMethod_STRUCT_SEL:
+    if (use_top_mask) {
+      top_mask = (*top)[1]->mutable_gpu_data();
+    } else {
+      mask = max_idx_.mutable_gpu_data();
+    }
+
+
     if (Caffe::phase() == Caffe::TRAIN) {
        this->GeneratePoolingStructure();
        
        const int* pooling_structure = this->pooling_structure_.gpu_data();
        
-       StructSelPoolForwardTrain<Dtype><<<CAFFE_GET_BLOCKS(count),
+       /*StructSelPoolForwardTrain<Dtype><<<CAFFE_GET_BLOCKS(count),
                                    CAFFE_CUDA_NUM_THREADS>>>(
           count, bottom_data, pooling_structure, bottom[0]->num(), channels_,
           height_, width_, pooled_height_, pooled_width_, kernel_h_,
-          kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, top_data);
+          kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, top_data);*/
+        // NOLINT_NEXT_LINE(whitespace/operators)
+        StructSelPoolForwardTrain<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
+            count, bottom_data, pooling_structure, bottom[0]->num(), channels_,
+            height_, width_, pooled_height_, pooled_width_, kernel_h_,
+            kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, top_data,
+            mask, top_mask);
     }else {
-      StructSelPoolForwardTest<Dtype><<<CAFFE_GET_BLOCKS(count),
+      /*StructSelPoolForwardTest<Dtype><<<CAFFE_GET_BLOCKS(count),
                                    CAFFE_CUDA_NUM_THREADS>>>(
           count, bottom_data, bottom[0]->num(), channels_,
           height_, width_, pooled_height_, pooled_width_, kernel_h_,
-          kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, top_data);
+          kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, top_data);*/
+        // NOLINT_NEXT_LINE(whitespace/operators)
+        MaxPoolForward<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
+            count, bottom_data, bottom[0]->num(), channels_,
+            height_, width_, pooled_height_, pooled_width_, kernel_h_,
+            kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, top_data,
+            mask, top_mask);
     }
     break;
   case PoolingParameter_PoolMethod_BINARY:
@@ -496,6 +562,7 @@ __global__ void AvePoolBackward(const int nthreads, const Dtype* top_diff,
   }
 }
 
+//not used right now
 template <typename Dtype>
 __global__ void StructSelPoolBackward(const int nthreads, 
     const Dtype* bottom_data, const Dtype* top_data, const Dtype* top_diff, 
@@ -583,6 +650,7 @@ void PoolingLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   const Dtype* top_mask = NULL;
   switch (this->layer_param_.pooling_param().pool()) {
   case PoolingParameter_PoolMethod_MAX:
+  case PoolingParameter_PoolMethod_STRUCT_SEL:
     if (use_top_mask) {
       top_mask = top[1]->gpu_data();
     } else {
@@ -610,12 +678,12 @@ void PoolingLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
         pooled_width_, kernel_h_, kernel_w_, stride_h_, stride_w_,
         bottom_diff);
     break;
-  case PoolingParameter_PoolMethod_STRUCT_SEL:
+  /*case PoolingParameter_PoolMethod_STRUCT_SEL:
     StructSelPoolBackward<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
         count, (*bottom)[0]->gpu_data(), top[0]->gpu_data(), top_diff, top[0]->num(), channels_,
         height_, width_, pooled_height_, pooled_width_, kernel_h_,
         kernel_w_, stride_h_, stride_w_, pad_h_, pad_w_, bottom_diff);
-    break;
+    break;*/
   case PoolingParameter_PoolMethod_BINARY:
     if (use_top_mask) {
       top_mask = top[1]->gpu_data();
