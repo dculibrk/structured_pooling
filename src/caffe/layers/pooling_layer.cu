@@ -66,18 +66,20 @@ __global__ void BinaryPoolForward(const int nthreads, const Dtype* bottom_data,
     wstart = max(wstart, 0);
     Dtype scale_fator = 0;
     int maxidx = 0; //wil use this to store the binary value
+    int count = 0;
     bottom_data += (n * channels + c) * height * width;
     for (int h = hstart; h < hend; ++h) {
       for (int w = wstart; w < wend; ++w) {
         if (bottom_data[h * width + w] > 0) {
           maxidx = maxidx & 0x1;
           //maxval = bottom_data[maxidx];
+	  count++;
 	}
         maxidx = (maxidx << 1);
       }
     }
     scale_fator = (1 << (kernel_h*kernel_w));
-    top_data[index] = maxidx; //(Dtype)maxidx/scale_fator;
+    top_data[index] = count; //maxidx; //(Dtype)maxidx/scale_fator;
     if (mask) {
       mask[index] = maxidx;
     } else {
