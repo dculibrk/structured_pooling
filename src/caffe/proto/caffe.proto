@@ -581,6 +581,7 @@ message PoolingParameter {
     STOCHASTIC = 2;
     STRUCT_SEL = 3;
     BINARY = 4;
+    MULT_STRUCT_SEL = 5;
   }
   optional PoolMethod pool = 1 [default = MAX]; // The pooling method
   // Pad, kernel size, and stride are all given as a single value for equal
@@ -594,6 +595,12 @@ message PoolingParameter {
   optional uint32 stride = 3 [default = 1]; // The stride (equal in Y, X)
   optional uint32 stride_h = 7; // The stride height
   optional uint32 stride_w = 8; // The stride width
+  optional float drop_portion = 12  [default = 0.5]; // The stride width
+  optional uint32 min_rect_h = 13 [default = 1]; // dropout ratio
+  optional uint32 max_rect_h = 14 [default = 1]; // dropout ratio
+  optional uint32 min_rect_w = 15 [default = 3]; // dropout ratio
+  optional uint32 max_rect_w = 16 [default = 5]; // dropout ratio
+  
   enum Engine {
     DEFAULT = 0;
     CAFFE = 1;
@@ -718,6 +725,7 @@ message V0LayerParameter {
     STOCHASTIC = 2;
     STRUCT_SEL = 3;
     BINARY = 4;
+    MULT_STRUCT_SEL = 5;
   }
   optional PoolMethod pool = 11 [default = MAX]; // The pooling method
   optional float dropout_ratio = 12 [default = 0.5]; // dropout ratio

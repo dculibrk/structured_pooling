@@ -61,8 +61,6 @@ void PoolingLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     CHECK_LT(pad_h_, kernel_h_);
     CHECK_LT(pad_w_, kernel_w_);
   }
-  
-
 }
 
 template <typename Dtype>
@@ -95,7 +93,9 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   // If max pooling, we will initialize the vector index part.
   if ((this->layer_param_.pooling_param().pool() ==
       PoolingParameter_PoolMethod_MAX || this->layer_param_.pooling_param().pool() ==
-      PoolingParameter_PoolMethod_BINARY ) && top->size() == 1) {
+      PoolingParameter_PoolMethod_BINARY || this->layer_param_.pooling_param().pool() ==
+      PoolingParameter_PoolMethod_STRUCT_SEL || this->layer_param_.pooling_param().pool() ==
+      PoolingParameter_PoolMethod_MULT_STRUCT_SEL) && top->size() == 1) {
     max_idx_.Reshape(bottom[0]->num(), channels_, pooled_height_,
         pooled_width_);
   }
@@ -106,7 +106,8 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
       pooled_width_);
   }
   //If structural pooling we wil initialize the pooling_structure
-  if (this->layer_param_.pooling_param().pool() == PoolingParameter_PoolMethod_STRUCT_SEL) {
+  if ((this->layer_param_.pooling_param().pool() == PoolingParameter_PoolMethod_STRUCT_SEL)||
+	(this->layer_param_.pooling_param().pool() == PoolingParameter_PoolMethod_MULT_STRUCT_SEL)) {
     //LoadPoolingStructure();
     //CHECK_EQ(this->blobs_.size(), 0) << "PoolingLayer should have no blobs unless STRUCT_SEL.";
 
@@ -119,6 +120,14 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     //this->blobs_[0]->Reshape(channels_, pooled_height_*pooled_width_/*map_size*/, pooled_height_, pooled_width_);
     
     //pooling_structure_ = this->blobs_[0].get();
+    drop_portion_ = this->layer_param_.pooling_param().drop_portion();
+
+    if(this->layer_param_.pooling_param().pool() == PoolingParameter_PoolMethod_MULT_STRUCT_SEL) {
+    	min_w_ = this->layer_param_.pooling_param().min_rect_w();
+    	max_w_ = this->layer_param_.pooling_param().max_rect_w();
+    	min_h_ = this->layer_param_.pooling_param().min_rect_h();
+    	max_h_ = this->layer_param_.pooling_param().max_rect_h();
+    }
     pooling_structure_.Reshape(1, channels_, pooled_height_, pooled_width_);
   }
 }
@@ -222,7 +231,8 @@ void PoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
     }
     break;
   case PoolingParameter_PoolMethod_STRUCT_SEL:
-    GeneratePoolingStructure();
+  case PoolingParameter_PoolMethod_MULT_STRUCT_SEL:
+    GeneratePoolingStructure(drop_portion_, min_h_, max_h_, min_w_, max_w_);
     pooling_structure  = pooling_structure_.mutable_cpu_data();
 
     // Initialize
@@ -365,6 +375,7 @@ void PoolingLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     }
     break;
   case PoolingParameter_PoolMethod_STRUCT_SEL:
+  case PoolingParameter_PoolMethod_MULT_STRUCT_SEL:
     
     for (int n = 0; n < top[0]->num(); ++n) {
       pooling_structure  = pooling_structure_.cpu_data();
@@ -537,8 +548,55 @@ void PoolingLayer<Dtype>::GenerateSinglePoolingMask(int* pooling_structure, floa
 
 }
 
+template<typename Dtype>
+void PoolingLayer<Dtype>::GenerateSinglePoolingMaskMult(int* pooling_structure, float alpha, int min_h, int max_h, int min_w, int max_w) {
+
+  //int W, int H, unsigned int **mask;
+
+  //int n_pooled_elements, c, i, k;
+  int w,h,x,y,x1,y1,i,j,n;
+
+  int top_size = pooled_width_*pooled_height_;//36; Area
+
+  int W = pooled_width_;
+  int H = pooled_height_;
+
+  // we do the grid-based approach where we mask top-level neurons
+  int Area = top_size;
+  float n_ave_zero_elements= Area * alpha;
+
+  //compute the average area, assuming h and w are indipendent random
+  //variables, uniformely distributed:
+  float ave_w= (min_w + max_w) / 2;
+  float ave_h= (min_h + max_h) / 2; // if h and w are symmetric, then just compute ave_side instead of ave_w and ave_h to save time...
+  float ave_rect_area= ave_w * ave_h;
+
+
+  int n_rects= (int) (n_ave_zero_elements / ave_rect_area + 0.4999999);
+    
+  for (i= 0; i < H; i++)
+    for (j= 0; j < W; j++)
+      pooling_structure[i*pooled_width_ + j] = 1;
+
+  for (n= 1; n<= n_rects; n++) {
+
+      w= alea(min_w, max_w);
+      h= alea(min_h, max_h);
+      x= alea(0, W - w - 1);
+      y= alea(0, H - h - 1);
+    x1= x + w - 1;
+    y1= y + h - 1;
+
+    for (i= 0; i < H; i++)
+      for (j= 0; j < W; j++)
+        if (i >= y && i <= y1 && j >= x && j <= x1)
+          pooling_structure[i*pooled_width_ + j] = 0;
+  }
+
+}
+
 template<typename Dtype> 
-void PoolingLayer<Dtype>::GeneratePoolingStructure(float alpha, bool switch_off_rect) {
+void PoolingLayer<Dtype>::GeneratePoolingStructure(float alpha, int min_h, int max_h, int min_w, int max_w) {
   
   int n_pooled_elements, c, i;
 
@@ -563,7 +621,6 @@ void PoolingLayer<Dtype>::GeneratePoolingStructure(float alpha, bool switch_off_
   ///pooling_structure_.Reshape(channels_, pooled_height_*pooled_width_/*map_size*/, height_, width_); // I will use masks instead of indexing for efficiency-]
   //pooling_structure_.Update();
   
-  CHECK_EQ(this->layer_param_.pooling_param().pool(), PoolingParameter_PoolMethod_STRUCT_SEL) << "PoolingLayer should not generate pooling mask unless STRUCT_SEL.";
   
   int* pooling_structure = pooling_structure_.mutable_cpu_data();
 
@@ -593,8 +650,11 @@ void PoolingLayer<Dtype>::GeneratePoolingStructure(float alpha, bool switch_off_
 	pooling_structure[y_coordinate*width_ + x_coordinate] = 1;
       
       }*/
-
-      GenerateSinglePoolingMask(pooling_structure, alpha, false);
+     if(this->layer_param_.pooling_param().pool() == PoolingParameter_PoolMethod_STRUCT_SEL){
+         GenerateSinglePoolingMask(pooling_structure, alpha, false);
+     }else{
+         GenerateSinglePoolingMaskMult(pooling_structure, alpha, min_h, max_h, min_w, max_w);
+     }
       
       pooling_structure += pooling_structure_.offset(0,1); //move through map neurons-]
     //}

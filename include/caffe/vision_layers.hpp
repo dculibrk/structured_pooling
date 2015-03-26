@@ -302,7 +302,7 @@ class PoolingLayer : public Layer<Dtype> {
   }
   
  virtual inline Blob<int>* get_pooling_structure(){return &pooling_structure_;}
- virtual void GeneratePoolingStructure(float alpha = 0.5, bool switch_off_rect = false);
+ virtual void GeneratePoolingStructure(float alpha, int min_h, int max_h, int min_w, int max_w);
 
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
@@ -314,6 +314,7 @@ class PoolingLayer : public Layer<Dtype> {
   virtual void Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom);
   virtual void GenerateSinglePoolingMask(int* pooling_structure, float alpha, bool switch_off_rect = false);
+  virtual void GenerateSinglePoolingMaskMult(int* pooling_structure, float alpha, int min_h, int max_h, int min_w, int max_w);
 
   int kernel_h_, kernel_w_;
   int stride_h_, stride_w_;
@@ -323,6 +324,12 @@ class PoolingLayer : public Layer<Dtype> {
   int pooled_height_, pooled_width_;
   //Field used to store the pooling structure
   Blob<int> pooling_structure_;
+  
+  float drop_portion_; //stores the proportion of the neurons we want to drop
+  int min_h_;
+  int max_h_;
+  int min_w_;
+  int max_w_; 
   
   Blob<Dtype> rand_idx_;
   Blob<int> max_idx_;

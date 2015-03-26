@@ -64,22 +64,41 @@ __global__ void BinaryPoolForward(const int nthreads, const Dtype* bottom_data,
     int wend = min(wstart + kernel_w, width);
     hstart = max(hstart, 0);
     wstart = max(wstart, 0);
-    Dtype scale_fator = 0;
+    Dtype scale_factor = 0;
     int maxidx = 0; //wil use this to store the binary value
     int count = 0;
+    int change_count = 0;
+
     bottom_data += (n * channels + c) * height * width;
+    int last_value;
+    int current_value = 0;
+
+    if(bottom_data[hstart * width + wstart] > 0){
+        current_value = 1;
+    }
+
     for (int h = hstart; h < hend; ++h) {
       for (int w = wstart; w < wend; ++w) {
         if (bottom_data[h * width + w] > 0) {
-          maxidx = maxidx & 0x1;
-          //maxval = bottom_data[maxidx];
-	  count++;
-	}
+            maxidx = maxidx & 0x1;
+            //maxval = bottom_data[maxidx];
+            count++;
+            current_value = 1;
+        }else{
+            current_value = 0;
+        }
+
+        if (current_value^last_value) {
+            change_count++;
+        }
+
         maxidx = (maxidx << 1);
+        last_value = current_value;
       }
     }
-    scale_fator = (1 << (kernel_h*kernel_w));
-    top_data[index] = count; //maxidx; //(Dtype)maxidx/scale_fator;
+    scale_factor = (1 << (kernel_h*kernel_w));
+    top_data[index] = change_count; //(Dtype)count/(pooled_width * pooled_height)
+        //+ (Dtype)change_count/(pooled_width * pooled_height * pooled_width * pooled_height);//(count << 8)+change_count;//;count; //maxidx; //(Dtype)maxidx/scale_fator;
     if (mask) {
       mask[index] = maxidx;
     } else {
@@ -373,6 +392,7 @@ void PoolingLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     }
     break;
   case PoolingParameter_PoolMethod_STRUCT_SEL:
+  case PoolingParameter_PoolMethod_MULT_STRUCT_SEL:
     if (use_top_mask) {
       top_mask = (*top)[1]->mutable_gpu_data();
     } else {
@@ -381,7 +401,7 @@ void PoolingLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 
 
     if (Caffe::phase() == Caffe::TRAIN) {
-       this->GeneratePoolingStructure();
+       this->GeneratePoolingStructure(drop_portion_, min_h_, max_h_, min_w_, max_w_);
        
        const int* pooling_structure = this->pooling_structure_.gpu_data();
        
@@ -653,6 +673,7 @@ void PoolingLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
   switch (this->layer_param_.pooling_param().pool()) {
   case PoolingParameter_PoolMethod_MAX:
   case PoolingParameter_PoolMethod_STRUCT_SEL:
+  case PoolingParameter_PoolMethod_MULT_STRUCT_SEL:
     if (use_top_mask) {
       top_mask = top[1]->gpu_data();
     } else {
